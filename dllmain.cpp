@@ -11,6 +11,7 @@
 #include <objbase.h>
 #include <ole2.h>
 #include <commctrl.h>
+#include <uxtheme.h>
 #include <vector>
 #include <string>
 #include <mmsystem.h>
@@ -23,6 +24,7 @@
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "uxtheme.lib")
 
 using namespace pfc;
 
@@ -46,6 +48,40 @@ static cfg_bool g_always_on_top(guid_always_on_top, true);
 
 static HINSTANCE g_hInst = NULL;
 static class MetronomeWindow* g_metronomeWindow = NULL;
+
+// ==================== ТЁМНАЯ ТЕМА ====================
+static HBRUSH g_hbrDarkBackground = NULL;
+static HBRUSH g_hbrDarkEdit = NULL;
+
+static bool IsDarkMode() {
+    // g_is_dark_mode() безопасен: возвращает false, если ui_config_manager недоступен (fb2k < 2.0)
+    return ui_config_manager::g_is_dark_mode();
+}
+
+static HBRUSH GetDarkBackgroundBrush() {
+    if (!g_hbrDarkBackground) g_hbrDarkBackground = CreateSolidBrush(RGB(45, 45, 45));
+    return g_hbrDarkBackground;
+}
+
+static HBRUSH GetDarkEditBrush() {
+    if (!g_hbrDarkEdit) g_hbrDarkEdit = CreateSolidBrush(RGB(30, 30, 30));
+    return g_hbrDarkEdit;
+}
+
+static void CleanupDarkBrushes() {
+    if (g_hbrDarkBackground) { DeleteObject(g_hbrDarkBackground); g_hbrDarkBackground = NULL; }
+    if (g_hbrDarkEdit) { DeleteObject(g_hbrDarkEdit); g_hbrDarkEdit = NULL; }
+}
+
+// Применяем тёмную тему к ComboBox через SetWindowTheme
+static void ApplyDarkThemeToComboBox(HWND hCombo) {
+    if (!hCombo) return;
+    SetWindowTheme(hCombo, L"DarkMode_CFD", NULL);
+    COMBOBOXINFO cbi = { sizeof(cbi) };
+    if (GetComboBoxInfo(hCombo, &cbi) && cbi.hwndList) {
+        SetWindowTheme(cbi.hwndList, L"DarkMode_Explorer", NULL);
+    }
+}
 
 // ==================== ГЕНЕРАТОР ЗВУКА ====================
 class AudioGenerator {
@@ -1019,6 +1055,12 @@ public:
                 }
 
                 CheckDlgButton(hWnd, IDC_ALWAYS_ON_TOP, g_always_on_top ? BST_CHECKED : BST_UNCHECKED);
+
+                // Применяем тёмную тему к ComboBox (только если тёмный режим включён)
+                if (IsDarkMode()) {
+                    ApplyDarkThemeToComboBox(hCombo);
+                }
+
                 LoadValues();
             }
         }
@@ -1033,7 +1075,7 @@ public:
         virtual t_uint32 get_state() {
             t_uint32 state = 0;
             if (m_changed) state |= preferences_state::changed;
-            state |= preferences_state::resettable;
+            state |= preferences_state::resettable | preferences_state::dark_mode_supported;
             return state;
         }
 
@@ -1125,6 +1167,47 @@ public:
                     self->CheckChanges();
                 }
                 return TRUE;
+
+            case WM_CTLCOLORDLG:
+            {
+                if (IsDarkMode()) {
+                    return (INT_PTR)GetDarkBackgroundBrush();
+                }
+            }
+            break;
+
+            case WM_CTLCOLORSTATIC:
+            {
+                if (IsDarkMode()) {
+                    HDC hdc = (HDC)wp;
+                    SetTextColor(hdc, RGB(220, 220, 220));
+                    SetBkMode(hdc, TRANSPARENT);
+                    return (INT_PTR)GetDarkBackgroundBrush();
+                }
+            }
+            break;
+
+            case WM_CTLCOLOREDIT:
+            {
+                if (IsDarkMode()) {
+                    HDC hdc = (HDC)wp;
+                    SetTextColor(hdc, RGB(220, 220, 220));
+                    SetBkColor(hdc, RGB(30, 30, 30));
+                    return (INT_PTR)GetDarkEditBrush();
+                }
+            }
+            break;
+
+            case WM_CTLCOLORLISTBOX:
+            {
+                if (IsDarkMode()) {
+                    HDC hdc = (HDC)wp;
+                    SetTextColor(hdc, RGB(220, 220, 220));
+                    SetBkColor(hdc, RGB(30, 30, 30));
+                    return (INT_PTR)GetDarkEditBrush();
+                }
+            }
+            break;
             }
             return FALSE;
         }
@@ -1134,9 +1217,9 @@ public:
 // ==================== ИНФОРМАЦИЯ О КОМПОНЕНТЕ ====================
 DECLARE_COMPONENT_VERSION(
     "Metronome",
-    "1.0.0",
+    "1.0.1",
     "Metronome synchronized with foobar2000 playback.\n"
-    "- Reads BPM from BPM & Key Detector → tags → default\n"
+    "- Reads BPM from BPM & Key Detector, tags, default\n"
     "- Shift resets to 0 on track change\n"
     "- Configurable arrow step"
 );
@@ -1155,6 +1238,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         icc.dwSize = sizeof(icc);
         icc.dwICC = ICC_UPDOWN_CLASS | ICC_BAR_CLASSES;
         InitCommonControlsEx(&icc);
+    }
+    else if (ul_reason_for_call == DLL_PROCESS_DETACH) {
+        CleanupDarkBrushes();
     }
     return TRUE;
 }

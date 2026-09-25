@@ -47,6 +47,10 @@ If the window is already open, it will be brought to the foreground and updated 
 - **ASIO devices** – may not work due to exclusive mode; use WASAPI or Default device
 - **BPM & Key Detector** – component must be installed, window must be open and visible for detection to work
 
+## Patch v1.0.1
+
+- Fixed dark theme in the preferences page
+
 ---
 
 <a name="русский"></a>
@@ -85,6 +89,10 @@ If the window is already open, it will be brought to the foreground and updated 
 
 - **ASIO devices** – могут не работать из-за эксклюзивного режима; используйте WASAPI или устройство по умолчанию
 - **BPM & Key Detector** – компонент должен быть установлен, окно должно быть открыто и видимо для работы определения
+
+## Patch v1.0.1
+
+- Исправлена тёмная тема на странице настроек
 
 ---
 
